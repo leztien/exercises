@@ -1,0 +1,128 @@
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from numpy import exp, log as ln
+
+
+from sys import exit
+
+
+
+def predict(X, w11,w12,b1, w21,b2):
+    x1,x2 = X.T
+    z1 = w11*x1 + w12*x2 + b1
+    a1 = 1 / (1 + exp(-z1))
+    z2 = w21*a1 + b2
+    a2 = 1 / (1 + exp(-z2))
+    return(a2)
+
+
+
+def cost(ytrue, ypred):
+    cross_entropy = -(ln(ypred)*ytrue + ln(1-ypred)*(1-ytrue)).sum()/len(ytrue)
+    return(cross_entropy)
+
+
+#data    
+r = np.linspace(-10,10,100)
+XX,YY = np.meshgrid(r,r)
+X = np.c_[XX.ravel(), YY.ravel()]
+    
+while(True):
+    w11,w12,b1, w21,b2 = np.random.uniform(-1,1, size=5)
+    y = predict(X, w11,w12,b1, w21,b2)
+    y = ytrue = (y >= 0.5).astype("uint8")
+    if np.divide(*(sorted(np.bincount(y))+[np.inf])[:2]) > 0.3:
+        break
+
+print(np.bincount(y))
+true_weights = np.array((w11,w12,b1, w21,b2)).round(3)
+
+
+
+
+#data
+X,y = X,ytrue
+m,n = X.shape
+η = 0.1
+tol = 0.1
+max_iter = 1000
+x1,x2 = X.T
+
+#initial weights
+w11,w12,b1, w21,b2 = np.random.normal(loc=0, scale=0.5, size=5)
+
+for epoch in range(max_iter):
+
+    #forward propagation
+    a1 = 1 / (1 + exp(-(w11*x1 + w12*x2 + b1)))
+    a2 = 1 / (1 + exp(-(w21*a1 + b2)))
+    
+    δ = a2 - ytrue   # dL_dz2
+    dL_dw21 = (δ*a1).mean()  #scalar
+    dL_db2 = δ.mean()    #scalar
+    
+    dL_da1 = δ*w21  #vector
+    da1_dz1 = a1*(1-a1)  #vector
+    dL_dz1 = dL_da1 * da1_dz1 #vector
+    
+    dL_dw11 = dL_dz1 * X[:,0] #vector
+    dL_dw12 = dL_dz1 * X[:,1] # vector
+    dL_db1 = dL_dz1  # vector
+    
+    dL_dw11 = dL_dw11.mean() #scalar
+    dL_dw12 = dL_dw12.mean() #scalar
+    dL_db1 = dL_db1.mean() #scalar
+    
+    #update
+    w21 = w21 - η*dL_dw21
+    b2 = b2 - η*dL_db2
+    w11 = w11 - η*dL_dw11
+    w12 = w12 - η*dL_dw12
+    b1 = b1 - η*dL_db1
+    
+    
+    #gradient checking
+    ε = 0.001
+    run = ε*2
+    weights = (w11, w12, b1, w21, b2)
+    derivatives = (dL_dw11, dL_dw12, dL_db1, dL_dw21, dL_db2)
+    
+    for j,w in enumerate(weights):
+        w0 = np.array(weights)
+        w1 = np.array(weights)
+        w0[j] -= ε; w1[j] += ε
+        
+        ypred0 = predict(X, *w0)
+        ypred1 = predict(X, *w1)
+        rise = cost(ytrue, ypred1) - cost(ytrue, ypred0)
+        derivative = rise/run
+        b = np.allclose(derivative, derivatives[j], rtol=1e-2)
+        if not b:
+            print(np.array([derivative, derivatives[j]]).round(5))
+     
+        
+    #check convergence through cost
+    ypred = predict(X, w11,w12,b1, w21,b2)
+    J = cost(ytrue,ypred)
+    if not epoch%(max_iter//100): print(J.round(5))
+    if J < tol:
+        print(f"epoch {epoch}/{max_iter}", "\tcost =", round(J,3))
+        break
+
+print("true weights:", true_weights)
+print("learned weights:", np.array([w11,w12,b1, w21,b2]).round(3))
+
+sp = plt.axes(projection="3d")
+ZZ = ytrue.reshape(YY.shape)
+sp.plot_surface(XX,YY,ZZ, alpha=0.5)
+
+
+ypred = predict(X, w11,w12,b1, w21,b2)
+ZZ = ypred.reshape(YY.shape)
+sp.plot_surface(XX,YY,ZZ, alpha=0.5)
+
