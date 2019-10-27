@@ -1,0 +1,93 @@
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from numpy import exp, log as ln
+
+
+def make_data():
+    r = np.linspace(-10,10,100)
+    XX,YY = np.meshgrid(r,r)
+    X = np.c_[XX.ravel(), YY.ravel()]
+        
+    while(True):
+        w11,w12,b1, w21,b2 = np.random.uniform(-1,1, size=5)
+        weights = [([w11,w12],[b1]),([w21],[b2])]
+        y = hypothesis(X, weights)
+        y = (y >= 0.5).astype("uint8")
+        if np.divide(*(sorted(np.bincount(y))+[np.inf])[:2]) > 0.3:
+            break
+    return(X,y)
+
+
+def hypothesis(X, weights):
+    a = X
+    for layer in weights:
+        w,b = layer
+        z = (a*w).sum(1, keepdims=True) + b
+        a = 1 / (1 + exp(-z))
+    return(a.ravel())
+    
+############################################################################
+    
+X,y = make_data()
+
+#hyperparameters
+η = 0.1
+tol = 0.1
+max_iter = 10000
+m,n = X.shape
+
+#initial weights
+w11,w12,b1, w21,b2 = np.random.normal(loc=0, scale=1, size=5)
+w1 = np.array((w11,w12))
+b1 = b1
+w2 = np.array((w21,))
+b2 = b2
+
+#loop
+for epoch in range(max_iter):
+    #forward propagation
+    a1 = 1/(1 + exp(-((X*w1).sum(1)+b1)))
+    a2 = 1/(1 + exp(-(a1*w2+b2)))
+    
+    #backpropagation
+    δ = a2 - y            #vector
+    
+    #derivatives of the last layer
+    dw2 = np.dot(δ,a1)/m   #scalar
+    db2 = δ.mean()
+    
+    #backprop to layer 1
+    dz1 = δ = δ*w2*a1*(1-a1)
+    dw1 = (X * δ.reshape(-1,1)).mean(0)
+    db1 = δ.mean(0)
+    
+    #update
+    w1 -= η*dw1
+    b1 -= η*db1
+    w2 -= η*dw2
+    b2 -= η*db2
+    
+    #check convergence
+    p = hypothesis(X, [(w1,b1),(w2,b2)])
+    J = -(ln(p)*y + ln(1-p)*(1-y)).mean()
+    if not epoch%(max_iter//100):print(J.round(5))
+    if J < tol: 
+        print(f"epoch: {epoch}/{max_iter}\t\tcost = {J:.3f}")
+        break
+
+
+#visualize
+r = np.linspace(-10,10,100)
+XX,YY = np.meshgrid(r,r)
+
+sp = plt.axes(projection="3d")
+ZZ = y.reshape(YY.shape)
+sp.plot_surface(XX,YY,ZZ, alpha=0.5)
+
+hypothesis(X, [(w1,b1),(w2,b2)])
+ZZ = p.reshape(YY.shape)
+sp.plot_surface(XX,YY,ZZ, alpha=0.5)
+
