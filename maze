@@ -1,4 +1,5 @@
 
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -24,70 +25,106 @@ def str_to_mx(s:"str representation of a maze") -> np.ndarray:
     s = s.strip().translate(d)
     mx = [[int(e) for e in s] for s in s.strip().split('\n')]
     return np.array(mx, dtype='uint8')
+
+
+class Maze:
+    def __init__(self, layout, moves):
+        self._layout = layout
+        self._starting_position = moves[0]
+        self._moves = moves[1:]
+    
+    def update(self, frame):  # 1 move = 4 updates
+        ix = frame
+        #direction = self._moves[ix]
+        #self.move(direction=direction)
+        circle = self.circle    
+        x,y = circle.get_center()
+        x += 0.1
+        circle.set_center([x,y])
+        
+        
+    def go(self):
+        from matplotlib.animation import FuncAnimation
+        self.draw_maze()
+        self.place_turtle()
+        moves = self._moves
+        anim = FuncAnimation(self.fig, self.update, frames=100, interval=67)
+        plt.show()
+    
+    
+    def draw_maze(self):
+        mx = self._layout
+        m,n = mx.shape
+        fig = plt.figure()
+        sp = fig.add_subplot(111)
+    
+        sp.set(xlim=(0,n), ylim=(m,0))
+        sp.set(xticks=[], yticks=[])
+        sp.set_facecolor("orange")
+        
+        #get indeces and draw bricks
+        nx_row, nx_col = np.indices(mx.shape)
+        MASK = mx==1
+        nx = tuple(zip(nx_col[MASK], nx_row[MASK]))
+        [sp.add_patch(Rectangle(xy=xy, width=1, height=1, color='brown', ec='k')) for xy in nx]
+        self.fig = fig
+        self.sp = sp
+        return fig,sp
+        
+    def place_turtle(self):
+        from matplotlib.patches import Circle
+        y,x = self._starting_position
+        circle = Circle(xy=(x+.5, y+.5), radius=0.3, color='darkblue')
+        self.sp.add_patch(circle)
+        self.circle = circle
+        return circle
+    
+    def move(self, direction):
+        pass
+    
+    
+    
+def solve_maze(layout):
+    #choose starting position
+    starting_position = (1,1)
+    
+    
+    #initiate Maze
+    moves = [starting_position, 0,1,2,3]  # go up, dowm left, right, drop breadcrum
+    maze = Maze(layout, moves)
+    maze.go()
+    return moves
+    
     
 
-def draw_maze(mx):
-    m,n = mx.shape
-    sp = plt.axes()
-    #sp.axis('equal')
-    sp.set(xlim=(0,n), ylim=(m,0))
-    sp.set(xticks=[], yticks=[])
-    sp.set_facecolor("orange")
-    
-    #get indeces and draw bricks
-    nx_row, nx_col = np.indices(mx.shape)
-    MASK = mx==1
-    nx = tuple(zip(nx_col[MASK], nx_row[MASK]))
-    [sp.add_patch(Rectangle(xy=xy, width=1, height=1, color='brown', ec='k')) for xy in nx]
-    return sp
 
 
-mx = str_to_mx(s)
-sp = draw_maze(mx)
+  
 
-#######################
-
-#%matplotlib nbagg
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from matplotlib.patches import Circle, Rectangle
+layout = str_to_mx(s)
+solve_maze(layout)
 
 
-def update(ix, mx, line):   # ix = frame number
-    global circle
 
-    x,y = circle.get_center()
-    x += 0.1
-    circle.set_center([x,y])
 
-    line.set_data(*mx[:ix].T)  # mx.shape = (2,100)
-    return line,
 
-###############################################
 
-#figure
-fig = plt.figure()
-plt.axis([0,10, 0,10])
-plt.xticks([]); plt.yticks([])
-sp = plt.gca()
 
-#rectangles
-rectangle = Rectangle(xy=(2,3), width=1, height=1)
-sp.add_patch(rectangle)
 
-#circle
-circle = Circle(xy=(5,5), radius=0.2)
-plt.gca().add_patch(circle)
 
-#sinusoid
-x = np.linspace(0, 10, 100)
-y = (np.sin(x)*3)+3
-mx = np.c_[x,y]
-line, = plt.plot([], "r-")   # start with an empty plot
 
-#animation
-anim = FuncAnimation(fig, update, frames=100, fargs=(mx, line), interval=67)
-plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
