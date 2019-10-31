@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Circle
 
 s =\
 """
@@ -32,36 +32,71 @@ class Maze:
         self._layout = layout
         self._starting_position = moves[0]
         self._moves = moves[1:]
-    
+        self._n_updates_per_move = 4
+        self._step = 1/self._n_updates_per_move
+        self.frames = len(self._moves) * self._n_updates_per_move
+        self._skip_first_update = True  #bug?
+
     def update(self, frame):  # 1 move = 4 updates
-        ix = frame
-        #direction = self._moves[ix]
-        #self.move(direction=direction)
-        circle = self.circle    
+        #must skip the fursz zero update (matplotlib bug?)
+        if frame==0 and self._skip_first_update:
+            self._skip_first_update = False
+            return
+
+
+        ix = frame // self._n_updates_per_move
+        direction = abs(self._moves[ix])
+        drop_breadcrum = True if (self._moves[ix] < 0 and frame%self._n_updates_per_move==0) else False
+
+
+        circle = self.circle
         x,y = circle.get_center()
-        x += 0.1
+
+        #leave breadcrum
+        if drop_breadcrum:
+            print("leaving breadcrum @", frame, ix, direction)
+            breadcrum = Circle(xy=(x, y), radius=0.1, color='yellow', zorder=-1)
+            self.sp.add_patch(breadcrum)
+
+
+
+        #move the turtle further
+        if direction == 1: y -= self._step
+        elif direction == 2: x += self._step
+        elif direction == 3: y += self._step
+        elif direction == 4: x -= self._step
+        else: pass
+
+        #check if bumped into a wall
+        r,c = [int(y-0.5), int(x-0.5)]
+        bumped = (self._layout[r,c]==1)and(frame%self._n_updates_per_move==0)
+        if bumped:
+            print("bumped into the wall @", r,c)
+
+
         circle.set_center([x,y])
-        
-        
+        print(frame, ix, direction)
+
+
+
     def go(self):
         from matplotlib.animation import FuncAnimation
         self.draw_maze()
         self.place_turtle()
-        moves = self._moves
-        anim = FuncAnimation(self.fig, self.update, frames=100, interval=67)
+        anim = FuncAnimation(self.fig, self.update, frames=self.frames, interval=67, repeat=False)
         plt.show()
-    
-    
+
+
     def draw_maze(self):
         mx = self._layout
         m,n = mx.shape
         fig = plt.figure()
         sp = fig.add_subplot(111)
-    
+
         sp.set(xlim=(0,n), ylim=(m,0))
         sp.set(xticks=[], yticks=[])
         sp.set_facecolor("orange")
-        
+
         #get indeces and draw bricks
         nx_row, nx_col = np.indices(mx.shape)
         MASK = mx==1
@@ -70,7 +105,7 @@ class Maze:
         self.fig = fig
         self.sp = sp
         return fig,sp
-        
+
     def place_turtle(self):
         from matplotlib.patches import Circle
         y,x = self._starting_position
@@ -78,53 +113,28 @@ class Maze:
         self.sp.add_patch(circle)
         self.circle = circle
         return circle
-    
+
     def move(self, direction):
         pass
-    
-    
-    
+
+
+
 def solve_maze(layout):
     #choose starting position
-    starting_position = (1,1)
-    
-    
+    starting_position = (5,5)
+
+
     #initiate Maze
-    moves = [starting_position, 0,1,2,3]  # go up, dowm left, right, drop breadcrum
+    moves = [starting_position, 1,2,3,4,2,2,-2,2,2,4,4,4,4,4,-1,1,1,]  # go up, right, down, left, drop breadcrum
     maze = Maze(layout, moves)
     maze.go()
     return moves
-    
-    
 
 
 
-  
+
+
+
 
 layout = str_to_mx(s)
 solve_maze(layout)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
