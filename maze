@@ -119,13 +119,11 @@ class Maze:
 
 
 
-def solve_maze(layout):
+def solve_maze(layout, moves=None):
     #choose starting position
-    starting_position = (5,5)
+    start = tuple(moves[0])
+    assert layout[start] == 0, "bad starting position"
 
-
-    #initiate Maze
-    moves = [starting_position, 1,2,3,4,2,2,-2,2,2,4,4,4,4,4,-1,1,1,]  # go up, right, down, left, drop breadcrum
     maze = Maze(layout, moves)
     maze.go()
     return moves
@@ -136,5 +134,39 @@ def solve_maze(layout):
 
 
 
+
+
+
+###################################
+
+def make_random_walk(layout, start=None, n=100):
+    from random import randint
+    position = np.array(start or (5, 9), dtype='uint8')  # np.array((5,9), dtype='uint8')
+    d = {1: (-1, 0), 2: (0, 1), 3: (1, 0), 4: (0, -1)}
+    moves = list()
+
+    while (len(moves) < n):
+        direction = randint(min(d.keys()), max(d.keys()))
+        new_position = position + d[direction]
+        try:
+            v = layout[tuple(new_position)]
+            assert v == 0, "bumped into the wall!"
+            assert (new_position == new_position.__abs__()).all(), "negative index!"
+
+        except (IndexError, AssertionError):
+            continue
+        else:
+            position = new_position
+            moves.append(direction)
+    moves = list((tuple(start),)) + [-n for n in moves]
+    return (moves)
+
+
+
 layout = str_to_mx(s)
-solve_maze(layout)
+moves = make_random_walk(n=100, layout=layout, start=(5, 9))
+solve_maze(layout, moves=moves)
+
+
+
+
