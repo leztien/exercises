@@ -1,0 +1,77 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.basemap import Basemap
+
+
+path = r"~/Downloads/germany.csv"
+df = pd.read_csv(path)
+
+
+fig = plt.figure(figsize=(10,5))
+bm = Basemap(projection="mill", resolution='l',
+             llcrnrlat=47, llcrnrlon=5,
+             urcrnrlat=56, urcrnrlon=16)
+bm.drawcoastlines()
+bm.drawcountries(linewidth=2)
+bm.drawrivers(color='b', linewidth=0.3)
+
+
+x1min = ((bm.xmax-bm.xmin) / (bm.boundarylonmax - bm.boundarylonmin)) / 60
+y1min = ((bm.ymax-bm.ymin) / (bm.boundarylats[1]-bm.boundarylats[0])) / 60
+markersize = 2
+
+for town,lat,lon,pop in df.iloc[:, [0,1,2,7]].values:
+    x,y = bm(lon,lat)
+    if np.isnan(np.float(pop)):     
+        bm.plot(x,y, 'b.', markersize=markersize)
+    else: 
+        plt.text(x+6*x1min, y-y1min, town, fontsize=6, va='center', ha='left')
+        bm.plot(x,y, 'b.', markersize=np.log10(pop)*(markersize/2), alpha=0.6)
+
+
+"""
+from sklearn.neighbors import KernelDensity
+X = np.fliplr(df.iloc[:, [1,2]].values)
+md = KernelDensity(bandwidth=0.3, kernel='gaussian', metric='euclidean')
+md.fit(X)
+xrange = np.linspace(bm.llcrnrlon, bm.urcrnrlon, 50)
+yrange = np.linspace(bm.llcrnrlat, bm.urcrnrlat, 50)
+XX,YY = np.meshgrid(xrange, yrange)
+Xgrid = np.c_[XX.ravel(), YY.ravel()]
+ypred = np.exp(md.score_samples(Xgrid))
+ZZ = ypred.reshape(XX.shape)
+xx,yy = bm(*Xgrid.T)
+XX,YY = (nd.reshape(XX.shape) for nd in (xx,yy))
+bm.contourf(XX,YY,ZZ, levels=10, cmap='jet', zorder=10, alpha=0.5)
+"""
+
+
+def pdf(x, μ=0, σ=1):
+    return np.exp(-np.square(x-μ)/(2*σ**2)) / (σ * np.sqrt(2*np.pi))
+
+
+def vector_norm(v):
+    return np.sqrt((np.array(v)**2).sum(axis=1, keepdims=True))
+
+def kde(x, X, weights=None, σ=1.0): # non-vectorized
+    m,n = X.shape
+    x = np.array(x)
+    if weights is not None:
+        weights = np.array(weights) / sum(weights)
+        m = 1
+    else: weights = 1
+    return (pdf(vector_norm(X-x)/σ) * weights).sum() / (m * σ**n)
+
+X = np.fliplr(df.iloc[:, [1,2]].values)
+weights = np.where(np.isnan(df["population"].values), 1, np.log10(df["population"].values))
+
+xrange = np.linspace(bm.llcrnrlon, bm.urcrnrlon, 50)
+yrange = np.linspace(bm.llcrnrlat, bm.urcrnrlat, 50)
+XX,YY = np.meshgrid(xrange, yrange)
+Xgrid = np.c_[XX.ravel(), YY.ravel()]
+ypred = np.array([kde(x, X, weights=weights, σ=0.3) for x in Xgrid])
+ZZ = ypred.reshape(XX.shape)
+xx,yy = bm(*Xgrid.T)
+XX,YY = (nd.reshape(XX.shape) for nd in (xx,yy))
+bm.contourf(XX,YY,ZZ, levels=10, cmap='jet', zorder=10, alpha=0.5)
