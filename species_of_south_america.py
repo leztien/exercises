@@ -45,7 +45,7 @@ Xtest = np.c_[YY.ravel(), XX.ravel()]
 Xtest = np.radians(Xtest[mask])
 
 species_names = ['Bradypus Variegatus', 'Microryzomys Minutus']
-colours = ['Purples', 'Reds']
+cmap = [plt.cm.Purples, plt.cm.Reds]
 
 X = np.radians(X)
 
@@ -73,7 +73,4 @@ for i,sp in enumerate(ax[1:]):
     
     #plot
     levels = np.linspace(0, ZZ.max(), 25)
-    m.contourf(XX,YY,ZZ, levels=levels, cmap=colours[i])
-
-
-
+    m.contourf(XX,YY,ZZ, levels=levels, cmap=cmap[i])
