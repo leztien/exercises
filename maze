@@ -19,6 +19,15 @@ s =\
 ++++++++++++++++++++++
 """
 
+def make_maze_matrix(string:'str representation of the maze',
+                     exit:'index of the exit as tuple'=None) -> np.ndarray:
+    d = str.maketrans({'+':'1', ' ':'0'})
+    s = string.strip().translate(d)
+    mx = np.array([[int(e) for e in s] for s in s.strip().split('\n')], dtype="int8")
+    if exit: mx[exit]=3
+    return mx
+
+
 
 def str_to_mx(s:"str representation of a maze") -> np.ndarray:
     d = str.maketrans({'+':'1', ' ':'0'})
@@ -44,21 +53,19 @@ class Maze:
         self._skip_first_update = True  #bug?
 
     def update(self, frame):  # 1 move = 4 updates
-        #must skip the fursz zero update (matplotlib bug?)
+        #must skip the furst zero update (matplotlib bug?)
         if frame==0 and self._skip_first_update:
             self._skip_first_update = False
             return
 
         ix = frame // self._n_updates_per_move
         direction = abs(self._moves[ix])
-        drop_breadcrum = True if (self._moves[ix] < 0 and frame%self._n_updates_per_move==0) else False
-
         x,y = self.circle.get_center()
 
-        #leave breadcrum
+        #leave a bread crumb
+        drop_breadcrum = frame % self._n_updates_per_move == 0
         if drop_breadcrum:
-            print("leaving breadcrum @", frame, ix, direction)
-            breadcrum = Circle(xy=(x, y), radius=0.1, color='yellow', zorder=-1)
+            breadcrum = Circle(xy=(x, y), radius=0.1, color='yellow', zorder=1)
             self.sp.add_patch(breadcrum)
 
         #move the turtle further
@@ -66,17 +73,15 @@ class Maze:
         elif direction == self.EAST: x += self._step
         elif direction == self.SOUTH: y += self._step
         elif direction == self.WEST: x -= self._step
-        else: pass
-
+        else: raise ValueError("bad direction")
 
         #check if bumped into a wall
         r,c = [int(y-0.5), int(x-0.5)]
-        bumped = (self._layout[r,c]==1)and(frame%self._n_updates_per_move==0)
+        bumped = (self._layout[r,c] != 0)and(frame%self._n_updates_per_move==0)
         if bumped: print("going through the wall @", r,c)
 
+        #update the turtle position on the plot
         self.circle.set_center([x,y])
-        print(frame, ix, direction)
-
 
 
     def go(self):
@@ -109,18 +114,26 @@ class Maze:
     def place_turtle(self):
         from matplotlib.patches import Circle
         y,x = self._starting_position
-        circle = Circle(xy=(x+.5, y+.5), radius=0.3, color='darkblue')
+        circle = Circle(xy=(x+.5, y+.5), radius=0.3, color='darkblue', zorder=3)
         self.sp.add_patch(circle)
         self.circle = circle
         return circle
 
 
 
-def solve_maze(layout, moves=None):
-    #choose starting position
-    start = tuple(moves[0])
+
+def solve_maze(layout, start=None):
+    OBSTACLE = 1
+    BREADCRUMB = 2
+    EXIT = 3
+    start = start or (5,9)
     assert layout[start] == 0, "bad starting position"
 
+
+
+
+    moves = [start,]
+    moves.extend([1,1,1,1,3,3,3,3,4,4,4,4,4,4,4])
     maze = Maze(layout, moves)
     maze.go()
     return moves
@@ -136,85 +149,10 @@ def solve_maze(layout, moves=None):
 
 ###################################
 
-def make_random_walk(layout, start=None, n=100):
-    from random import randint
-    position = np.array(start or (5, 9), dtype='uint8')  # np.array((5,9), dtype='uint8')
-    d = {1: (-1, 0), 4: (0, 1), 2: (1, 0), 3: (0, -1)}
-    moves = list()
-
-    while (len(moves) < n):
-        direction = randint(min(d.keys()), max(d.keys()))
-        new_position = position + d[direction]
-        try:
-            v = layout[tuple(new_position)]
-            assert v == 0, "bumped into the wall!"
-            assert (new_position == new_position.__abs__()).all(), "negative index!"
-
-        except (IndexError, AssertionError):
-            continue
-        else:
-            position = new_position
-            moves.append(direction)
-    moves = list((tuple(start),)) + [-n for n in moves]
-    return (moves)
 
 
 
-layout = str_to_mx(s)
-moves = make_random_walk(n=100, layout=layout, start=(5, 9))
-#moves = [(5, 9), 1,1,1,2,2,2,3,3,3,4,4,4]
-print(moves)
-solve_maze(layout, moves=moves)
-
-
-
-
-
-def make_straight_walk(layout, start=None, n=100):
-    from collections import deque
-    from random import randint
-    position = np.array(start or (5, 9), dtype='uint8')  # np.array((5,9), dtype='uint8')
-    d = {1: (-1, 0), 2: (0, 1), 3: (1, 0), 4: (0, -1)}
-    q = deque((1,2,3,4), maxlen=4)
-    moves = list()
-    layout = layout.copy()
-
-    #while (len(moves) < n):
-    direction = randint(1, 4)
-    for _ in range(100):
-        #direction = q[0]
-
-        new_position = position + d[direction]
-        try:
-            v = layout[tuple(new_position)]
-            assert v != 1, "bumped into the wall!"
-            assert (new_position == new_position.__abs__()).all(), "negative index!"
-
-        except (IndexError, AssertionError):
-            #q.append(q[0])
-            direction = randint(1, 4)
-        else:
-            #check the new_position
-            if layout[tuple(new_position)] == 2:
-                #direction = randint(1, 4)
-                #continue
-                pass
-
-
-            #accept the new position as good and make that move
-            layout[tuple(position)] = 2
-            position = new_position
-            moves.append(direction)
-
-    moves = list((tuple(start),)) + [-n for n in moves]
-    return (moves)
-
-
-
-moves = make_straight_walk(layout, start=(5,9), n=100)
-#print(moves)
-#solve_maze(layout, moves=moves)
-
-
+layout = make_maze_matrix(s, exit=(2,0))
+solve_maze(layout, start=None)
 
 
