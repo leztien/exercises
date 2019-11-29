@@ -1,94 +1,102 @@
-#CONTINUE
 
-"""
-function that creates multidimensional data for ANN
-(the multidimensional space is filled with data-points and split; border-line data-points are removed 
-  (or rather moved to the center of the respective class))
-
-"""
-
-
-
-#CONTINUE
-"""
-make synthetic dataset function for NN
-"""
-
+#IN PROGRESS
 import matplotlib.pyplot as plt
+"""
+function generating synthetic multidimensional data for ANN by forward propagation
 
-import sklearn
-from sklearn.datasets import load_digits
+the multidimensional space is (linearly) filled with data-points
+the weights-matreces are filled with values from standard normal distribution 
+the data is forward-propagated through the weights
+
+"""
+
+
+
+import numpy as np
+
+def avg_entropy(p): #prefer lower entropy
+    from numpy import log2 as log, dot
+    return -dot(p, log(p)) / log(len(p))
+
+
+
+#########################################################
+
+
+
+
+m = 10000
+n = 2
+K = 10
+L = 3
+u = 32
+gmm = True
+seed = 42
+
+
+shapes = (n,) + (u,)*L + (K,)
+
+#np.random.seed(seed)
+
+#create weights
+g = zip(shapes[1:], shapes[:-1])  #shape-tuples
+WW = [np.random.normal(loc=0, scale=1, size=shape) for shape in g]
+
+
+
+#create data
+X = np.random.uniform(-1,1, size=(m,n))
+
+
+
+
+
+#forward propagation
+def softmax(Z):
+    return np.exp(Z) / np.exp(Z).sum(0, keepdims=True)
+
+A = X.T
+for l,W in enumerate(WW):
+    Z = np.matmul(W,A) 
+    A = (np.tanh if l<len(WW)-1 else softmax)(Z)
+P = A.T    
+y = P.argmax(1)
+print(np.bincount(y))
+
+
+if n == 2:
+    plt.figure()
+    plt.scatter(*X.T, c=y, s=5, cmap='rainbow')
+
+
+#GMM (the separability is usually better with GMM)
+if gmm:
+    print("WITH GMM")
+    default_n_gaussians = 25
+    n_gaussians = ((abs(int(gmm))-1) or default_n_gaussians-1)+1
+    classes = sorted(set(y))
+    from sklearn.mixture import GaussianMixture
+    MD = [GaussianMixture(n_components=n_gaussians, covariance_type='spherical').fit(X[y==c]) for c in classes]
+    mm = [X[y==c].shape[0] for c in classes]
+    y = sum([[k]*m for k,m in zip(range(len(classes)),mm)], [])
+    X = np.vstack([md.sample(m)[0] for md,m in zip(MD,mm)])
+
+
+print(X.shape, "<<<SHAPE")
+
+
+
+if n == 2:
+    plt.figure()
+    plt.scatter(*X.T, c=y, s=5, cmap='rainbow')
+
+
+
 from sklearn.neural_network import MLPClassifier
-from sklearn.preprocessing import MinMaxScaler
-
-bunch = load_digits()
-X = bunch.data
-y = bunch.target
-
-X = MinMaxScaler().fit_transform(X)
-
-md = MLPClassifier((128,64,64))
+md = MLPClassifier((64,64,64))
 md.fit(X,y)
-
 acc = md.score(X,y)
 print(acc)
-
-plt.hist(md.coefs_[-1].ravel())
-
-
-
-#############
-import numpy as np, matplotlib.pyplot as plt
-m = 1000
-a1 = np.random.normal(loc=0, scale=0.15, size=m)
-a2 = np.random.uniform(-1,1, size=m)
-plt.hist((a1+a2)/2)
-
-###################
-#prefer lower entropy (in each observation's target)
-
-def entropy(p):
-    from numpy import log2 as log, dot
-    assert sum(p)==1.0,"bad probabilities"
-    entropy = -dot(p, log(p))
-    return entropy
-
-
-def avg_entropy(p):
-    from numpy import log2 as log, dot, array, float128, allclose
-    nd = array(p, dtype=float128)
-    print(nd, nd.sum())
-    #assert allclose(nd, 1.0),"bad probabilities"
-    return -dot(nd, log(nd)) / log(len(p))
-
-
-
-p = (.12, .18, .28, .42)
-
-p = (.25, .25, .25, .25)
-p = (.5, .5)
-p = (1/3, 1/3, 1/3)
-p = (.1, .1, .1, .1, .1, .1, .1, .1, .1, .1)
-
-from decimal import Decimal
-d = Decimal('0.1')
-p = [d,]*10
-
-d = Decimal('0.33333333333333333333333333333333333333333333333')
-p = [d,]*3
-
-
-#H = entropy(p)
-#print(H)
-
-p = (.12, .18, .28, .42)
-p = (.1, .2, .3, .4)
-p = (.1, .1, .1, .1, .6)
-
-ae = avg_entropy(p)
-print(ae)
-
-
 
 
 
