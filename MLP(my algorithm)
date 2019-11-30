@@ -27,8 +27,8 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 
 class MLP(BaseEstimator, ClassifierMixin):
     def __init__(self, layers, activation, validation, verbose):
-        pass
-    
+        self.activation = get_activation_function(activation)
+        
     def fit(self, X,y):
         pass
     
@@ -36,16 +36,70 @@ class MLP(BaseEstimator, ClassifierMixin):
         pass
     
     def predict(self, X):
+        self.linear
         pass
     
-    #register activation functions (make each function also return its initializer)
-    @staticmethod
-    def linear(input=None, derivative=False, initializer=False):
-        pass
 
 
 
-md = MLP(1,2,3,4)
+#===================================================================
+
+def get_activation_function(name):
+    d = dict()
+    
+    def register(func):
+        nonlocal d
+        d.setdefault(func.__name__.lower().strip(), func)
+        return func
+    
+    #paste your activation functions here:
+    @register
+    def linear(input, derivative=False, initializer=False):
+        return input
+    
+    @register
+    def leakyrelu(input, derivative=False, initializer=False):
+        return input
+    
+    @register
+    def sigmoid(input, derivative=False, initializer=False):
+        return input
+    
+    #provide for double names (of activation functions)
+    t = (
+    ['logistic','sigmoid'],
+    ['leaky','leakyrelu','leaky-relu','leaky_relu'],
+    ['tanh','tangent hyporbolic']
+    )
+    
+    for i in range(len(t)):
+        l = [s for s in d.keys() if s in t[i]]
+        if l:
+            t[i].remove(l[0])
+            [d.__setitem__(k, d[l[0]]) for k in t[i]]
+    
+    #get the appropriate activation function from the dictionary
+    if name is None:
+        return d["sigmoid"]
+    else:
+        try: return d[str(name).lower().strip()]
+        except KeyError:
+            msg = "No such activation function: " + str(name)
+            raise ValueError(msg)
+
+
+
+####################################################################################
+
+
+
+
+
+
+
+md = MLP(1,None,3,4)
+
+
 
 layers = (32,16,8)
 activation = None
@@ -59,37 +113,6 @@ K = len(classes)
 
 shapes = (n,) + layers + (K,)  #temporary
 shapes = [(m,n) for m,n in zip(shapes[1:],shapes[:-1])]
-
-
-
-########
-functions_register_list = []
-
-def decorator_function(func):
-    global functions_register_list
-    functions_register_list.append(func.__name__)
-    free_variable = 0
-    def closure_function(*args, **kwargs):
-        nonlocal free_variable
-        free_variable += 1
-        result = func(*args, **kwargs)
-        return (free_variable, result)
-    return closure_function
-
-@decorator_function
-def fn1(arg1, arg2=20, *, kw1, kw2):
-    return (arg1, arg2, kw1, kw2)
-
-print(functions_register_list)      #['fn1',]
-output = fn1(10, kw1=100, kw2=200)  #(1, (10, 20, 100, 200))
-output = fn1(10, kw1=100, kw2=200)  #(2, (10, 20, 100, 200))
-
-
-
-
-
-
-
 
 
 
