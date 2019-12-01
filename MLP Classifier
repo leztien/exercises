@@ -17,20 +17,29 @@ def load_from_github(url):
     return module
 
 
-url = r"https://raw.githubusercontent.com/leztien/synthetic_datasets/master/make_data_for_ANN.py"
-module = load_from_github(url)
-X,y = module.make_data_for_ANN(m=1000, n=2, K=5, L=3, u=16, gmm=True, balanced_classes=True, seed=True)
-
+#===========================================================
 
 
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 class MLP(BaseEstimator, ClassifierMixin):
-    def __init__(self, layers, activation, validation, verbose):
+    def __init__(self, layers, activation=None, validation=None, verbose=None):
+        self.layers = tuple(layers)
         self.activation = get_activation_function(activation)
+        self.output_activation = None
+        self.validation = validation
+        self.verbose = verbose
         
     def fit(self, X,y):
-        pass
+        m,n = X.shape
+        classes = sorted(set(y))
+        K = len(classes)
+        
+        self.output_activation = get_activation_function("sigmoid" if n==2 else "softmax")
+        
+        shapes = (n,) + self.layers + (K,)
+        shapes = [(m,n) for m,n in zip(shapes[1:],shapes[:-1])]
+        print(shapes)
     
     def probabilities(self, X):
         pass
@@ -58,11 +67,23 @@ def get_activation_function(name):
         return input
     
     @register
+    def relu(input, derivative=False, initializer=False):
+        return input
+    
+    @register
     def leakyrelu(input, derivative=False, initializer=False):
         return input
     
     @register
+    def tanh(input, derivative=False, initializer=False):
+        return input
+    
+    @register
     def sigmoid(input, derivative=False, initializer=False):
+        return input
+    
+    @register
+    def softmax(input, derivative=False, initializer=False):
         return input
     
     #provide for double names (of activation functions)
@@ -94,26 +115,14 @@ def get_activation_function(name):
 
 
 
+url = r"https://raw.githubusercontent.com/leztien/synthetic_datasets/master/make_data_for_ANN.py"
+module = load_from_github(url)
+X,y = module.make_data_for_ANN(m=1000, n=3, K=5, L=3, u=16,
+                               balanced_classes=True, space_between_classes=True, seed=None)
 
 
 
-md = MLP(1,None,3,4)
-
-
-
-layers = (32,16,8)
-activation = None
-
-
-
-m,n = X.shape
-classes = sorted(set(y))
-K = len(classes)
-
-
-shapes = (n,) + layers + (K,)  #temporary
-shapes = [(m,n) for m,n in zip(shapes[1:],shapes[:-1])]
-
-
+md = MLP(layers=(64,32,16), activation="relu")
+md.fit(X,y)
 
 
