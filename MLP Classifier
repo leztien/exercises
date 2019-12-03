@@ -41,7 +41,7 @@ class MLP(BaseEstimator, ClassifierMixin):
         self.learning_rate = np.float64(learning_rate or 0.001)
         self.batch_size = abs(int(batch_size or 0))
         self.validation = validation
-        self.max_iter = abs(int(max_iter or 100))
+        self.max_iter = abs(int(max_iter or 300))
         self.verbose = verbose
         
       
@@ -74,6 +74,7 @@ class MLP(BaseEstimator, ClassifierMixin):
             ix = int(len(y) * (1-self.validation)) # index where the validation subset should start
             (X,Y),(Xval,Yval) = (nd[:ix] for nd in (X,Y)), (nd[ix:] for nd in (X,Y))
             Y = Y.T
+            Yval = Yval.T
             Yfull = Y
             m = len(X)
             
@@ -128,7 +129,7 @@ class MLP(BaseEstimator, ClassifierMixin):
             #gradient check
             pass
         
-            #check convergence
+            #calculate and log cost
             J = self._cost(Y, A[L])
             self.train_cost.append(J)
 
@@ -136,14 +137,37 @@ class MLP(BaseEstimator, ClassifierMixin):
                 self.weights = W[1:]
                 self.bias = b[1:]
                 Pval = self.probabilities(Xval)
-                Jval = self._cost(Yval, Pval)
+                Jval = self._cost(Yval, Pval.T)
                 self.validation_cost.append(Jval)
             
+            #check convergence
+            if self.validation:
+                n_last = 10
+                if len(self.validation_cost) > n_last:
+                    l = self.validation_cost[-n_last:]
+                    no_change = np.allclose(l, np.mean(l), rtol=0.001)
+                    if no_change and Jval<0.09:
+                        print(f"The validation cost hasn't changed significantly for {n_last} last epochs. Breaking out after epoch#{epoch}")
+                        break
+            else:
+                if J < 0.02:
+                    print("The cost is {:.3f}. Breaking out after epoch#{}".format(J,epoch))
+                    break
+            
+            #printing current report
             if not(epoch%100) and self.verbose:
-                acc_train = "TODO"
-                acc_val = "TODO"
-                msg = "train cost = {:.3f}".format(J)
-                if self.validation: msg += "\tval cost = {:.3f}".format(Jval)
+                if K==2:
+                    acc_train = np.equal((A[L]>.5).astype("uint8").ravel(), Y.ravel()).mean()
+                    if self.validation: acc_val = np.equal(self.predict(Xval), Yval.ravel()).mean()
+                else:
+                    print("TODO")
+                    acc_train = np.equal(A[L].argmax(axis=0), Y.argmax(axis=0)).mean()
+                    if self.validation: acc_val = np.equal(self.predict(Xval), Yval.argmax(axis=0)).mean()
+
+                if self.validation:
+                    msg = "train/val cost: {:.3f}/{:.3f}\ttrain/val accuracy: {:.1%}/{:.1%}".format(J,Jval, acc_train, acc_val)
+                else:
+                    msg = "train cost = {:.3f}\ttrain accuracy = {:.1%}".format(J, acc_train)
                 print(msg)
         
         #if not converged:
@@ -161,12 +185,14 @@ class MLP(BaseEstimator, ClassifierMixin):
 
     def _cost(self, Y, P):  # Y = Ypred, P = Ppred
         if P.ndim==1: P = P.reshape(1,len(P))
+        m = P.shape[1]
+        assert Y.shape==P.shape,"inconsistent shapes: {} {}".format(Y.shape, P.shape)
         
         if P.shape[0]==1:
             y, p = Y.ravel(), P.flatten()
-            J = -( np.dot(np.log(p), y) + np.dot(np.log(1-p), (1-y))) / P.shape[1]
-            return J
-        else:print("TODO")
+            J = -( np.dot(np.log(p), y) + np.dot(np.log(1-p), (1-y))) / m
+        else: J = -(np.log(P)*Y).sum() / m
+        return J
     
     
     def probabilities(self, X):
@@ -182,11 +208,10 @@ class MLP(BaseEstimator, ClassifierMixin):
         P = self.probabilities(X)
         if P.ndim==1:
             ypred = (P > 0.5).astype("uint8")
-            return ypred
         elif P.ndim==2:
-            Ypred = P.argmax(axis=1)
-            return Ypred
+            ypred = P.argmax(axis=1)
         else: raise TypeError("bad dims")
+        return ypred
     
 
 
@@ -265,13 +290,12 @@ def get_activation_function(name):
 
 url = r"https://raw.githubusercontent.com/leztien/synthetic_datasets/master/make_data_for_ANN.py"
 module = load_from_github(url)
-X,y = module.make_data_for_ANN(m=1000, n=5, K=2, L=3, u=16,
+X,y = module.make_data_for_ANN(m=1000, n=5, K=2, L=2, u=8,
                                balanced_classes=True, space_between_classes=True, gmm=False, seed=None)
 
 
-
-md = MLP(layers=(64,32,16), activation="tanh", lagrangian=0.001, learning_rate=0.1,
-         batch_size=128, validation=0.25, max_iter=3000, verbose=True)
+md = MLP(layers=(32,32,32), activation="tanh", lagrangian=0.001, learning_rate=0.1,
+         batch_size=128, validation=None, max_iter=9000, verbose=True)
 
 md.fit(X,y)
 P = md.probabilities(X)
