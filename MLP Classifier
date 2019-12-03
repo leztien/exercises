@@ -23,30 +23,170 @@ def load_from_github(url):
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 class MLP(BaseEstimator, ClassifierMixin):
-    def __init__(self, layers, activation=None, validation=None, verbose=None):
+    def __init__(self, layers, activation=None, lagrangian=None, learning_rate=None,
+                 batch_size=None, validation=None, max_iter=None, verbose=None):
+        #validate the hyperparameters
+        if not any(isinstance(layers,cls) for cls in (tuple,list))\
+            or len(layers)<1 or not all(isinstance(e,int)and e>2 for e in layers):
+            raise TypeError("layers must be tuple or list of positive integers")
+        
+        if (lagrangian is not None) and lagrangian < 0: raise ValueError("lagrangian must be greater than zero") 
+        if not(validation in (None,False) or 0<validation<0.5): raise ValueError("bad validation proportion")
+        
+        
         self.layers = tuple(layers)
         self.activation = get_activation_function(activation)
         self.output_activation = None
+        self.lagrangian = np.float64(lagrangian or 1e-9)   # for no penalty set lagrangian=0
+        self.learning_rate = np.float64(learning_rate or 0.001)
+        self.batch_size = abs(int(batch_size or 0))
         self.validation = validation
+        self.max_iter = abs(int(max_iter or 100))
         self.verbose = verbose
         
+      
+ 
+        
     def fit(self, X,y):
+        
+        #shapes, classes
         m,n = X.shape
         classes = sorted(set(y))
         K = len(classes)
-        
-        self.output_activation = get_activation_function("sigmoid" if n==2 else "softmax")
-        
-        shapes = (n,) + self.layers + (K,)
+        shapes = (n,) + self.layers + ((1 if K==2 else K),)
         shapes = [(m,n) for m,n in zip(shapes[1:],shapes[:-1])]
-        print(shapes)
+        L = len(shapes)
+        
+        #reshape the target
+        if K==2:
+            Y = np.array(y, dtype="uint8").reshape(1, len(y))
+        else:
+            Y = np.zeros(shape=(K,len(y)), dtype="uint8")
+            [Y.__setitem__((y,i),1) for i,y in zip(range(len(y)),y)]
+        Yfull = Y   # for batch_size in SGD
+
+        
+        #if validation:
+        if self.validation:
+            nx = np.random.permutation(m)
+            Y = Y.T
+            X,Y = (nd[nx] for nd in (X,Y)) #shuffling
+            ix = int(len(y) * (1-self.validation)) # index where the validation subset should start
+            (X,Y),(Xval,Yval) = (nd[:ix] for nd in (X,Y)), (nd[ix:] for nd in (X,Y))
+            Y = Y.T
+            Yfull = Y
+            m = len(X)
+            
+        
+            
+        #determine the output activation function (based on the output shape)
+        self.output_activation = get_activation_function("sigmoid" if K==2 else "softmax")
+        
+        #initializers (i.e. standard deviations of the random weight-matreces per layer):
+        initializers = [self.activation.initializer(n_out,n_in) for (n_out,n_in) in shapes[:-1]]
+        initializers += [self.output_activation.initializer(*shapes[-1]),]  # add the output layer
+        
+        #create random weight-matreces and biases
+        W = [0,]+[np.random.randn(m,n)*σ for (m,n),σ in zip(shapes,initializers)]
+        b = [0,]+[np.zeros(shape=(m,1), dtype="float64") for (m,n) in shapes]
+        
+        #create containers (for A,Z,G,g)
+        A = [X.T,]+[None,]*L    
+        Z = [0,] + [None,]*L
+        G = [0,] + [None,]*L
+        g = [0,] + [None,]*L
+        
+        #create logs for cost
+        self.train_cost = list()
+        self.validation_cost = list()
+        
+        #LOOP
+        for epoch in range(self.max_iter):
+            #if SGD
+            if self.batch_size:
+                nx = np.random.permutation(m)[:self.batch_size]
+                A[0] = X[nx].T
+                Y = Yfull[:,nx]
+
+            #forward propagation
+            for l in range(1, L+1):
+                Z[l] = np.matmul(W[l], A[l-1]) + b[l]
+                A[l] = (self.activation if l<L else self.output_activation)(Z[l])
+            
+            #back propagation
+            for l in range(L,0,-1):
+                Δ = (A[L]-Y) if l==L else np.matmul(W[l+1].T, Δ) * self.activation(Z[l], derivative=True)
+                G[l] = ( np.matmul(Δ, A[l-1].T)  +  self.lagrangian * W[l]) / m
+                g[l] = Δ.sum(axis=1, keepdims=True) / m
+            
+            #update
+            for l in range(1, L+1):
+                W[l] -= self.learning_rate * G[l]
+                b[l] -= self.learning_rate * g[l]
+                
+            
+            #gradient check
+            pass
+        
+            #check convergence
+            J = self._cost(Y, A[L])
+            self.train_cost.append(J)
+
+            if self.validation:
+                self.weights = W[1:]
+                self.bias = b[1:]
+                Pval = self.probabilities(Xval)
+                Jval = self._cost(Yval, Pval)
+                self.validation_cost.append(Jval)
+            
+            if not(epoch%100) and self.verbose:
+                acc_train = "TODO"
+                acc_val = "TODO"
+                msg = "train cost = {:.3f}".format(J)
+                if self.validation: msg += "\tval cost = {:.3f}".format(Jval)
+                print(msg)
+        
+        #if not converged:
+        else:
+            from warnings import warn
+            msg = "Increase max_iter. {} epochs is not enough.".format(str(self.max_iter))
+            warn(msg, Warning)
+
+        #after the loop
+        self.weights = W[1:]
+        self.bias = b[1:]
+        
+
+        
+
+    def _cost(self, Y, P):  # Y = Ypred, P = Ppred
+        if P.ndim==1: P = P.reshape(1,len(P))
+        
+        if P.shape[0]==1:
+            y, p = Y.ravel(), P.flatten()
+            J = -( np.dot(np.log(p), y) + np.dot(np.log(1-p), (1-y))) / P.shape[1]
+            return J
+        else:print("TODO")
+    
     
     def probabilities(self, X):
-        pass
+        A = X.T
+        L = len(self.weights)
+        for l in range(L):  #note: here - zero based
+            Z = np.matmul(self.weights[l], A) + self.bias[l]
+            A = (self.activation if l<(L-1) else self.output_activation)(Z)
+        P = A.ravel() if A.shape[0]==1 else A.T
+        return(P)
     
     def predict(self, X):
-        self.linear
-        pass
+        P = self.probabilities(X)
+        if P.ndim==1:
+            ypred = (P > 0.5).astype("uint8")
+            return ypred
+        elif P.ndim==2:
+            Ypred = P.argmax(axis=1)
+            return Ypred
+        else: raise TypeError("bad dims")
     
 
 
@@ -55,42 +195,52 @@ class MLP(BaseEstimator, ClassifierMixin):
 
 def get_activation_function(name):
     d = dict()
-    
+        
     def register(func):
         nonlocal d
-        d.setdefault(func.__name__.lower().strip(), func)
+        name = func.__name__.lower().strip()
+        d.setdefault(name, func)
+        func.initializer = lambda n_out,n_in: np.sqrt( (1/n_in)if(name=="tanh") else(2/n_in)if("relu"in name) else (2/(n_in*n_out)))
         return func
     
     #paste your activation functions here:
     @register
-    def linear(input, derivative=False, initializer=False):
-        return input
+    def linear(Z, derivative=False):
+        if derivative: return np.ones_like(Z, dtype=float)
+        return Z
+
+    @register
+    def relu(Z, derivative=False):
+        if derivative: return (Z>0).astype(float)
+        return np.maximum(Z,0)
     
     @register
-    def relu(input, derivative=False, initializer=False):
-        return input
+    def leakyrelu(Z, derivative=False):
+        leak = 0.01
+        if derivative: return np.where(Z>0, 1, leak)
+        return np.maximum(Z, Z*leak)
     
     @register
-    def leakyrelu(input, derivative=False, initializer=False):
-        return input
+    def tanh(Z, derivative=False):
+        if derivative: return 1 - np.tanh(Z)**2
+        return np.tanh(Z)
     
     @register
-    def tanh(input, derivative=False, initializer=False):
-        return input
+    def sigmoid(Z, derivative=False):
+        if derivative: return np.exp(-Z) / (1 + np.exp(-Z))**2
+        return 1 / (1 + np.exp(-Z))
     
     @register
-    def sigmoid(input, derivative=False, initializer=False):
-        return input
-    
-    @register
-    def softmax(input, derivative=False, initializer=False):
-        return input
+    def softmax(Z, derivative=False):
+        if derivative: return None
+        return np.exp(Z) / np.exp(Z).sum(axis=0, keepdims=True)
     
     #provide for double names (of activation functions)
     t = (
     ['logistic','sigmoid'],
     ['leaky','leakyrelu','leaky-relu','leaky_relu'],
-    ['tanh','tangent hyporbolic']
+    ['tanh','tangent hyporbolic'],
+    ['linear','identity']
     )
     
     for i in range(len(t)):
@@ -113,16 +263,23 @@ def get_activation_function(name):
 ####################################################################################
 
 
-
-
 url = r"https://raw.githubusercontent.com/leztien/synthetic_datasets/master/make_data_for_ANN.py"
 module = load_from_github(url)
-X,y = module.make_data_for_ANN(m=1000, n=3, K=5, L=3, u=16,
-                               balanced_classes=True, space_between_classes=True, seed=None)
+X,y = module.make_data_for_ANN(m=1000, n=5, K=2, L=3, u=16,
+                               balanced_classes=True, space_between_classes=True, gmm=False, seed=None)
 
 
 
-md = MLP(layers=(64,32,16), activation="relu")
+md = MLP(layers=(64,32,16), activation="tanh", lagrangian=0.001, learning_rate=0.1,
+         batch_size=128, validation=0.25, max_iter=3000, verbose=True)
+
 md.fit(X,y)
+P = md.probabilities(X)
+ypred = md.predict(X)
+acc = md.score(X,y)
+print("accuracy =",acc)
 
+import matplotlib.pyplot as plt
+plt.plot(md.train_cost)
+if md.validation_cost: plt.plot(md.validation_cost)
 
