@@ -25,7 +25,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 
 class MLP(BaseEstimator, ClassifierMixin):
     def __init__(self, layers, activation=None, lagrangian=None, learning_rate=None,
-                 batch_size=None, validation=None, max_iter=None, verbose=None):
+                 batch_size=None, validation=None, max_iter=None, verbose=None, seed=None):
         #validate the hyperparameters
         if not any(isinstance(layers,cls) for cls in (tuple,list))\
             or len(layers)<1 or not all(isinstance(e,int)and e>2 for e in layers):
@@ -38,12 +38,13 @@ class MLP(BaseEstimator, ClassifierMixin):
         self.layers = tuple(layers)
         self.activation = get_activation_function(activation)
         self.output_activation = None
-        self.lagrangian = np.float64(lagrangian or 1e-9)   # for no penalty set lagrangian=0
+        self.lagrangian = 0.0 if lagrangian in (None,False) else np.float64(1e-9)    # for no penalty set lagrangian=0
         self.learning_rate = np.float64(learning_rate or 0.001)
         self.batch_size = abs(int(batch_size or 0))
         self.validation = validation
         self.max_iter = abs(int(max_iter or 300))
         self.verbose = verbose
+        self.seed = seed
         
       
  
@@ -93,6 +94,12 @@ class MLP(BaseEstimator, ClassifierMixin):
         initializers += [self.output_activation.initializer(*shapes[-1]),]  # add the output layer
         
         #create random weight-matreces and biases
+        if self.seed: 
+            if self.seed is True:
+                from random import randint
+                self.seed = randint(0, int(2**30))
+                print("random seed =", self.seed)
+            np.random.seed(abs(int(self.seed)))
         W = [0,]+[np.random.randn(m,n)*σ for (m,n),σ in zip(shapes,initializers)]
         b = [0,]+[np.zeros(shape=(m,1), dtype="float64") for (m,n) in shapes]
         
@@ -130,11 +137,9 @@ class MLP(BaseEstimator, ClassifierMixin):
             
             #gradient check
             gradient_check = self.verbose >= 3
-            if gradient_check and not(epoch%100) and not self.batch_size and not self.validation:
+            if gradient_check and not(epoch%100) and epoch>1 and not self.batch_size and not self.validation:
                 ε = 0.0001
                 run = ε*2
-                
-                #G_gradient_check = [np.zeros_like(mx) for mx in G]
                 counter = list()
                 
                 for l in range(1, L+1):
@@ -152,18 +157,18 @@ class MLP(BaseEstimator, ClassifierMixin):
                             rise = J1-J0
                             partial = rise/run
                             
-                            counter.append(np.allclose(partial, G[l][i,j], rtol=0.01))
+                            counter.append(np.allclose(partial, G[l][i,j], rtol=0.001))
 
                 p = np.mean(counter)
-                print("{:.0%} of partials match".format(p))
-                #from sys import exit; exit()
+                print("\ngradient check: {:.0%} of partials match".format(p))
+          
                 
-
-
-            #update
+            #update weights
             for l in range(1, L+1):
                 W[l] -= self.learning_rate * G[l]
                 b[l] -= self.learning_rate * g[l]
+                self.weights = W[1:]
+                self.bias = b[1:]
                
             
         
@@ -224,15 +229,17 @@ class MLP(BaseEstimator, ClassifierMixin):
 
     def _cost(self, Y, P):  # Y = Ypred, P = Ppred
         if P.ndim==1: P = P.reshape(1,len(P))
-        m = P.shape[1]
+        m = max(*P.shape)
         
         if Y.shape != P.shape: P = P.T
         assert Y.shape==P.shape,"inconsistent shapes: {} {}".format(Y.shape, P.shape)
         
+        penalty = 0 if not self.lagrangian else (sum(W.sum() for W in self.weights) * (self.lagrangian/m))
+        
         if P.shape[0]==1 or P.shape[1]==1:
             y, p = Y.ravel(), P.flatten()
-            J = -( np.dot(np.log(p), y) + np.dot(np.log(1-p), (1-y))) / m
-        else: J = -(np.log(P)*Y).sum() / m
+            J = -(np.dot(np.log(p), y) + np.dot(np.log(1-p), (1-y))) / m + penalty
+        else: J = -(np.log(P)*Y).sum() / m  + penalty
         return J
     
     
@@ -335,15 +342,15 @@ def get_activation_function(name):
 
 ####################################################################################
 
-"""
+
 url = r"https://raw.githubusercontent.com/leztien/synthetic_datasets/master/make_data_for_ANN.py"
 #module = load_from_github(url)
-X,y = module.make_data_for_ANN(m=1000, n=5, K=3, L=2, u=8,
+X,y = module.make_data_for_ANN(m=1000, n=5, K=4, L=2, u=8,
                                balanced_classes=True, space_between_classes=True, gmm=False, seed=None)
-"""
 
-md = MLP(layers=(16,8,4), activation="relu", lagrangian=0, learning_rate=0.1,
-         batch_size=None, validation=None, max_iter=9000, verbose=2)
+
+md = MLP(layers=(16,8,4), activation="tanh", lagrangian=10, learning_rate=0.1,
+         batch_size=128, validation=0.2, max_iter=9000, verbose=3, seed=True)
 
 md.fit(X,y)
 P = md.probabilities(X)
