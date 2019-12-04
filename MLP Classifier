@@ -1,5 +1,6 @@
 
 import numpy as np
+np.set_printoptions(suppress=True)
 
 
 def load_from_github(url):
@@ -56,6 +57,10 @@ class MLP(BaseEstimator, ClassifierMixin):
         shapes = (n,) + self.layers + ((1 if K==2 else K),)
         shapes = [(m,n) for m,n in zip(shapes[1:],shapes[:-1])]
         L = len(shapes)
+        if K>2:
+            from warnings import warn
+            msg = "optimization for more than two classes is faulty"
+            warn(msg, Warning)
         
         #reshape the target
         if K==2:
@@ -120,23 +125,54 @@ class MLP(BaseEstimator, ClassifierMixin):
                 G[l] = ( np.matmul(Δ, A[l-1].T)  +  self.lagrangian * W[l]) / m
                 g[l] = Δ.sum(axis=1, keepdims=True) / m
             
+
+                
+            
+            #gradient check
+            gradient_check = self.verbose >= 3
+            if gradient_check and not(epoch%100) and not self.batch_size and not self.validation:
+                ε = 0.0001
+                run = ε*2
+                
+                #G_gradient_check = [np.zeros_like(mx) for mx in G]
+                counter = list()
+                
+                for l in range(1, L+1):
+                    for i in range(W[l].shape[0]):
+                        for j in range(W[l].shape[1]):
+                            W0 = [l.copy() if isinstance(l, np.ndarray) else 0 for l in W]
+                            W1 = [l.copy() if isinstance(l, np.ndarray) else 0 for l in W]
+                            W0[l][i,j] -= ε
+                            W1[l][i,j] += ε
+                            P0 = self.probabilities(X, weights=W0, bias=b)
+                            P1 = self.probabilities(X, weights=W1, bias=b)
+                            J0 = self._cost(Y,P0)
+                            J1 = self._cost(Y,P1)
+                            
+                            rise = J1-J0
+                            partial = rise/run
+                            
+                            counter.append(np.allclose(partial, G[l][i,j], rtol=0.01))
+
+                p = np.mean(counter)
+                print("{:.0%} of partials match".format(p))
+                #from sys import exit; exit()
+                
+
+
             #update
             for l in range(1, L+1):
                 W[l] -= self.learning_rate * G[l]
                 b[l] -= self.learning_rate * g[l]
-                
+               
             
-            #gradient check
-            pass
         
             #calculate and log cost
             J = self._cost(Y, A[L])
             self.train_cost.append(J)
 
             if self.validation:
-                self.weights = W[1:]
-                self.bias = b[1:]
-                Pval = self.probabilities(Xval)
+                Pval = self.probabilities(Xval, weights=W, bias=b)
                 Jval = self._cost(Yval, Pval.T)
                 self.validation_cost.append(Jval)
             
@@ -158,16 +194,19 @@ class MLP(BaseEstimator, ClassifierMixin):
             if not(epoch%100) and self.verbose:
                 if K==2:
                     acc_train = np.equal((A[L]>.5).astype("uint8").ravel(), Y.ravel()).mean()
-                    if self.validation: acc_val = np.equal(self.predict(Xval), Yval.ravel()).mean()
+                    if self.validation: 
+                        P = self.predict(Xval, weights=W, bias=b)
+                        acc_val = np.equal(P, Yval.ravel()).mean()
                 else:
-                    print("TODO")
                     acc_train = np.equal(A[L].argmax(axis=0), Y.argmax(axis=0)).mean()
-                    if self.validation: acc_val = np.equal(self.predict(Xval), Yval.argmax(axis=0)).mean()
+                    if self.validation: 
+                        P = self.predict(Xval, weights=W, bias=b)
+                        acc_val = np.equal(P, Yval.argmax(axis=0)).mean()
 
                 if self.validation:
-                    msg = "train/val cost: {:.3f}/{:.3f}\ttrain/val accuracy: {:.1%}/{:.1%}".format(J,Jval, acc_train, acc_val)
+                    msg = "train/val cost: {:.3f}/{:.3f}\ttrain/val accuracy: {:.1%}/{:.1%}\tepoch: {}".format(J,Jval, acc_train, acc_val, epoch)
                 else:
-                    msg = "train cost = {:.3f}\ttrain accuracy = {:.1%}".format(J, acc_train)
+                    msg = "train cost = {:.3f}\ttrain accuracy = {:.1%} \tepoch {}".format(J, acc_train, epoch)
                 print(msg)
         
         #if not converged:
@@ -186,26 +225,35 @@ class MLP(BaseEstimator, ClassifierMixin):
     def _cost(self, Y, P):  # Y = Ypred, P = Ppred
         if P.ndim==1: P = P.reshape(1,len(P))
         m = P.shape[1]
+        
+        if Y.shape != P.shape: P = P.T
         assert Y.shape==P.shape,"inconsistent shapes: {} {}".format(Y.shape, P.shape)
         
-        if P.shape[0]==1:
+        if P.shape[0]==1 or P.shape[1]==1:
             y, p = Y.ravel(), P.flatten()
             J = -( np.dot(np.log(p), y) + np.dot(np.log(1-p), (1-y))) / m
         else: J = -(np.log(P)*Y).sum() / m
         return J
     
     
-    def probabilities(self, X):
+    def probabilities(self, X, **kwargs):
+        
+        W = kwargs.get("weights", None) or self.weights
+        b = kwargs.get("bias", None) or self.bias
+        if not isinstance(W[0], np.ndarray): W = W[1:]
+        if not isinstance(b[0], np.ndarray): b = b[1:]
+        
+        L = len(W)
         A = X.T
-        L = len(self.weights)
+        
         for l in range(L):  #note: here - zero based
-            Z = np.matmul(self.weights[l], A) + self.bias[l]
+            Z = np.matmul(W[l], A) + b[l]
             A = (self.activation if l<(L-1) else self.output_activation)(Z)
         P = A.ravel() if A.shape[0]==1 else A.T
         return(P)
     
-    def predict(self, X):
-        P = self.probabilities(X)
+    def predict(self, X, **kwargs):
+        P = self.probabilities(X, **kwargs)
         if P.ndim==1:
             ypred = (P > 0.5).astype("uint8")
         elif P.ndim==2:
@@ -287,15 +335,15 @@ def get_activation_function(name):
 
 ####################################################################################
 
-
+"""
 url = r"https://raw.githubusercontent.com/leztien/synthetic_datasets/master/make_data_for_ANN.py"
-module = load_from_github(url)
-X,y = module.make_data_for_ANN(m=1000, n=5, K=2, L=2, u=8,
+#module = load_from_github(url)
+X,y = module.make_data_for_ANN(m=1000, n=5, K=3, L=2, u=8,
                                balanced_classes=True, space_between_classes=True, gmm=False, seed=None)
+"""
 
-
-md = MLP(layers=(32,32,32), activation="tanh", lagrangian=0.001, learning_rate=0.1,
-         batch_size=128, validation=None, max_iter=9000, verbose=True)
+md = MLP(layers=(16,8,4), activation="relu", lagrangian=0, learning_rate=0.1,
+         batch_size=None, validation=None, max_iter=9000, verbose=2)
 
 md.fit(X,y)
 P = md.probabilities(X)
@@ -306,4 +354,6 @@ print("accuracy =",acc)
 import matplotlib.pyplot as plt
 plt.plot(md.train_cost)
 if md.validation_cost: plt.plot(md.validation_cost)
+
+
 
