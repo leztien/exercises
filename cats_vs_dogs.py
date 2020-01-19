@@ -25,4 +25,8 @@ for k in ("cat", "dog"):
         n = len(os.listdir(os.path.join(DIR, setname, k+'s')))
         print("{}/{}:".format(setname, k+'s').ljust(17) + "{: >4} images".format(n))
 else: print("FINISHED COPYING IMAGES")
-            
+
+#directories shortcuts
+train_dir = os.path.join(DIR, "train")             # dir-name as string
+validation_dir  = os.path.join(DIR, "validation")  # dir-name as string
+test_dir = os.path.join(DIR, "test")               # dir-name as string
