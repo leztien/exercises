@@ -1,7 +1,13 @@
 import os, shutil
 
+#Windows
 SRC = r"D:\Working\CATS_VS_DOGS\cats_and_dogs_labelled"
 DIR = r"D:\Working\CATS_VS_DOGS\cats_vs_dogs_small"
+
+#Linux
+SRC = r"/media/linux-ubuntu/DATA/Working/CATS_VS_DOGS/cats_and_dogs_labelled"
+DIR = r"/media/linux-ubuntu/DATA/Working/CATS_VS_DOGS/cats_vs_dogs_small"
+
 
 #create directories
 for dir in ("train", "validation", "test"):
@@ -10,7 +16,7 @@ for dir in ("train", "validation", "test"):
         os.makedirs(dirname)  # exist_ok=True
         
 numberings = (0, 1000, 1500, 2000)
-numberings = (0, 10, 15, 20)   # for test purposes
+numberings = (0, 10, 15, 20)   # for test purposes (comment this line out)
 
 for k in ("cat", "dog"):
     for (j,setname) in enumerate(["train", "validation", "test"]):
