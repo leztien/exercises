@@ -10,9 +10,9 @@ DIR = r"/media/linux-ubuntu/DATA/Working/CATS_VS_DOGS/cats_vs_dogs_small"
 
 
 #create directories
-for dir in ("train", "validation", "test"):
+for setname in ("train", "validation", "test"):
     for subdir in ("cats", "dogs"):
-        dirname = os.path.join(DIR, dir, subdir)
+        dirname = os.path.join(DIR, setname, subdir)
         os.makedirs(dirname)  # exist_ok=True
         
 numberings = (0, 1000, 1500, 2000)
@@ -21,7 +21,7 @@ numberings = (0, 10, 15, 20)   # for test purposes (comment this line out)
 for k in ("cat", "dog"):
     for (j,setname) in enumerate(["train", "validation", "test"]):
         r = range(*numberings[j:j+2])
-        g = ("cat.{}.jpg".format(i) for i in r)  #filenames
+        g = (k+".{}.jpg".format(i) for i in r)  #filenames
         #copy each file
         for filename in g:
             src = os.path.join(SRC, filename)
@@ -36,3 +36,7 @@ else: print("FINISHED COPYING IMAGES")
 train_dir = os.path.join(DIR, "train")             # dir-name as string
 validation_dir  = os.path.join(DIR, "validation")  # dir-name as string
 test_dir = os.path.join(DIR, "test")               # dir-name as string
+
+
+
+
