@@ -51,15 +51,27 @@ def make_data(m=100, n=3, balanced=True, seed=None):
 
 ###
 
-X,y = make_data(m=100, n=10, balanced=True, seed=True)
+X,y = make_data(m=200, n=5, balanced=True, seed=464)
 from sklearn.model_selection import train_test_split
 Xtrain,Xtest, ytrain,ytest = train_test_split(X,y)
 
-
+from sklearn.tree import DecisionTreeClassifier
 md = DecisionTreeClassifier(max_depth=None, min_samples_split=m//100, min_samples_leaf=m//200)
 md = DecisionTreeClassifier(max_depth=None, min_samples_split=6, min_samples_leaf=5)
 md.fit(Xtrain, ytrain)
 acc = md.score(Xtest, ytest)
 print("accuracy", acc)
 
+###
+
+def gini(*_):
+    ...
+
+j = 0
+t = tuple(np.c_[X[:,j], y].astype("uint8").tolist())
+values = ([1,1],[1,0],[0,1],[0,0])
+counts = [t.count(v) for v in values]
+g1 = gini(...)
+g0 = gini
+G = ...
 
