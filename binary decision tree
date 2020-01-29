@@ -1,0 +1,65 @@
+
+import numpy as np
+from sklearn.tree import DecisionTreeClassifier
+
+
+
+def make_data(m=100, n=3, balanced=True, seed=None):
+    """make binary data for a binary Decision Tree Classifier"""
+    #random seed
+    if seed is True:
+        seed = __import__("random").randint(0, 1000)
+        print("seed =", seed)
+    if seed:
+        np.random.seed(int(seed))
+    
+    #make data
+    pp = np.random.random(size=n)  # proportions of True in each feature
+    X = np.random.binomial(n=1, p=pp, size=(m,n))
+    Xoriginal = X.copy().astype('float')  # Xoriginal will be returned; mangle the X
+    
+    #reverse the boolean values of some features (e.g. is_old >> is_new)
+    def func(X):
+        mask = np.random.binomial(n=1, p=0.25, size=n).astype("uint8")
+        ff = np.array([np.vectorize(lambda x:x), np.logical_not])[mask]
+        Xbool = X.astype("bool")
+        Xnew = np.empty_like(X, dtype='bool')
+        for i,row in enumerate(Xbool):
+            Xnew[i] = [f(x) for f,x in zip(ff,row)]  
+        return Xnew.astype('uint8')
+    
+    X = func(X)
+    
+    #f!ck up a certain proportion of each feature by reversing the boolean value in a coresponding cell
+    high = (1/n)**3  # maximum allowed proportion to be mangled (the lower n the higher this proportion)
+    pp = np.random.uniform(low=0, high=high, size=n)  # proportion of each feature to be mangled
+    g = (np.random.permutation(m)[:int(m*p)] for p in pp)
+    for j,nx in enumerate(g):
+        X[nx,j] = np.logical_not(X[nx,j])  # reverse the boolean feature in certain cells
+        
+    #compute the target
+    y = X.sum(axis=1)
+    
+    #balanced or imbalanced dataset?
+    lower = abs(float(balanced)) if isinstance(balanced,float) else 0.5
+    threshold = 0.5 if balanced is True else np.random.uniform(lower, 0.99)
+    q = np.quantile(y, q=threshold)
+    y = (y >= q).astype('uint8')
+    return(Xoriginal,y)
+
+
+
+###
+
+X,y = make_data(m=100, n=10, balanced=True, seed=True)
+from sklearn.model_selection import train_test_split
+Xtrain,Xtest, ytrain,ytest = train_test_split(X,y)
+
+
+md = DecisionTreeClassifier(max_depth=None, min_samples_split=m//100, min_samples_leaf=m//200)
+md = DecisionTreeClassifier(max_depth=None, min_samples_split=6, min_samples_leaf=5)
+md.fit(Xtrain, ytrain)
+acc = md.score(Xtest, ytest)
+print("accuracy", acc)
+
+
