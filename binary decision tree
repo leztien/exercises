@@ -95,3 +95,112 @@ for j in range(n):
 bestGini = min(l, key=lambda t:t[-1])
 bestRootNode = min(l, key=lambda t:t[-1])[0]
 
+################################################################
+################################################################
+################################################################
+
+
+"""
+Create a working tree by a random process
+"""
+
+class Node():
+    def __init__(self, rule:'feature number to check if true'=None):
+        self.rule = rule
+        self.next_node_true = None
+        self.next_node_false = None
+    
+    def forward(self, x):
+        j = self.rule
+
+        if int(x[j]) == 1:
+            ans = self.next_node_true.forward(x)
+        elif int(x[j]) == 0:
+            ans = self.next_node_false.forward(x)
+        else: raise ValueError("bad value" + str(x[j]))
+        return ans
+    
+    def predict(self,x):
+        return self.forward(x)
+    
+    def __call__(self, x):
+        return self.forward(x)
+    
+    
+class Leaf():
+    def __init__(self, predicted_class=None):
+        self.predicted_class = predicted_class
+        
+    def forward(self, x):
+        ans = self.predicted_class
+        return ans
+
+
+def build_tree(depth):
+    global classes, n
+    global l, leaves_counter, nodes_counter
+    #base case
+    if depth==1:
+        random_class = classes[randint(0, len(classes)-1)]
+        leaf = Leaf(predicted_class=random_class)
+        leaves_counter += 1
+        print("attaching leaf", leaves_counter, "at level", depth)
+        l.append(leaf)
+        return leaf
+    #non-base case
+    random_rule = randint(0, n-1)
+    new = Node(rule=random_rule)
+    nodes_counter += 1
+    print("created node", nodes_counter, "at level", depth)
+    
+    node1 = build_tree(depth-1) if random()<0.8 else Leaf(predicted_class=classes[randint(0, len(classes)-1)])
+    node0 = build_tree(depth-1) if random()<0.8 else Leaf(predicted_class=classes[randint(0, len(classes)-1)])
+    new.next_node_true = node1
+    new.next_node_false = node0
+    return(new)
+
+#############################################################################   
+    
+
+leaf1 = Leaf(predicted_class=1)
+leaf0 = Leaf(predicted_class=0)
+
+root = Node(rule=0)
+nodeA = Node(rule=1)
+nodeB = Node(rule=2)
+
+root.next_node_true = nodeA
+root.next_node_false = nodeB  
+
+nodeA.next_node_true = leaf0
+nodeA.next_node_false = leaf1
+
+nodeB.next_node_true = leaf1
+nodeB.next_node_false = leaf0
+
+
+
+# use a recursive function (with some random behaviour inside) to create a tree
+from random import randint, random
+
+(m,n) = 100,5
+classes = (0,1,2,3)
+l = list()
+leaves_counter = 0
+nodes_counter = 0
+
+
+tree = build_tree(depth=4)
+
+xi = [randint(0,1) for _ in range(n)]
+
+ypred = tree(xi)
+ypred = tree.predict(xi)
+print(ypred)
+
+
+##test the tree
+import numpy as np
+X = np.random.randint(0,2, size=(m,n))
+ypred = [tree.predict(x) for x in X]
+print(ypred)
